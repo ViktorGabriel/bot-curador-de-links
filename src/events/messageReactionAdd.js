@@ -1,4 +1,8 @@
-import { isMessageSaved, saveLink } from '../services/database.js';
+import {
+  claimMessageForCuration,
+  markMessageCompleted,
+  markMessageFailed,
+} from '../services/database.js';
 import { extractLinkMetadata } from '../services/metadataScraper.js';
 import { buildCuratedEmbed } from '../utils/embedBuilder.js';
 
@@ -54,11 +58,8 @@ export default {
     // Verifica se o emoji corresponde ao configurado
     if (reaction.emoji.name !== process.env.TRIGGER_EMOJI) return;
 
-    // Consulta persistência SQLite para evitar duplicatas
-    if (isMessageSaved(message.id)) return;
-
     // Extrai URLs do texto
-    const rawUrls = message.content.match(URL_REGEX);
+    const rawUrls = message.content?.match(URL_REGEX);
     if (!rawUrls || rawUrls.length === 0) return;
 
     // Sanitiza e valida as URLs encontradas
@@ -74,29 +75,42 @@ export default {
       return;
     }
 
-    // Extração leve de metadados do primeiro link com timeout de 3 segundos
-    const metadata = await extractLinkMetadata(foundUrls[0]);
-
-    // Constrói o embed através do utilitário desacoplado
-    const embed = buildCuratedEmbed({
-      message,
-      curator: user,
-      urls: foundUrls,
-      metadata,
+    // Reserva atômica: previne condição de corrida (Race Condition) entre reações concorrentes
+    const claimed = claimMessageForCuration({
+      messageId: message.id,
+      curatorId: user.id,
+      channelId: targetChannel.id,
+      createdAt: message.createdAt,
     });
 
-    // Envia para o canal de destino
-    await targetChannel.send({ embeds: [embed] });
+    if (!claimed) {
+      // Mensagem já está sendo processada ou já foi concluída por outra reação
+      return;
+    }
 
-    // Registra os links salvos no banco SQLite
-    for (const url of foundUrls) {
-      saveLink({
-        messageId: message.id,
-        url,
-        userId: user.id,
-        channelId: targetChannel.id,
-        createdAt: message.createdAt,
+    try {
+      // Extração leve de metadados do primeiro link com timeout de 3 segundos
+      const metadata = await extractLinkMetadata(foundUrls[0]);
+
+      // Constrói o embed através do utilitário desacoplado
+      const embed = buildCuratedEmbed({
+        message,
+        curator: user,
+        urls: foundUrls,
+        metadata,
       });
+
+      // Envia para o canal de destino
+      await targetChannel.send({ embeds: [embed] });
+
+      // Finaliza a curadoria com transação atômica
+      markMessageCompleted({
+        messageId: message.id,
+        urls: foundUrls,
+      });
+    } catch (err) {
+      console.error('Falha durante o processamento da curadoria:', err.message || err);
+      markMessageFailed(message.id);
     }
   },
 };
