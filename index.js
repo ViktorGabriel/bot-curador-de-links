@@ -1,18 +1,10 @@
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
-import dotenv from 'dotenv';
+import env from './src/config/env.js';
+import logger from './src/utils/logger.js';
 import { loadEvents } from './src/handlers/eventHandler.js';
+import { closeDatabase } from './src/services/database.js';
 
-dotenv.config();
-
-// Validação de variáveis obrigatórias sem expor valores sensíveis
-const requiredEnv = ['DISCORD_TOKEN', 'TARGET_CHANNEL_ID', 'TRIGGER_EMOJI'];
-const missingEnv = requiredEnv.filter((key) => !process.env[key]);
-
-if (missingEnv.length > 0) {
-  console.error(`[Segurança] Variáveis de ambiente obrigatórias ausentes: ${missingEnv.join(', ')}`);
-  console.error('[Segurança] Configure o arquivo .env com base no .env.example antes de iniciar.');
-  process.exit(1);
-}
+logger.info({ env: env.NODE_ENV }, 'Iniciando bot-curador-de-links...');
 
 const client = new Client({
   intents: [
@@ -28,8 +20,53 @@ const client = new Client({
   ],
 });
 
-// Carrega e registra todos os eventos desacoplados
+// Carrega e registra dinamicamente todos os eventos
 await loadEvents(client);
 
+// ==========================================
+// Gerenciamento de Ciclo de Vida & Graceful Shutdown
+// ==========================================
+let isShuttingDown = false;
+
+async function handleGracefulShutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  logger.warn({ signal }, 'Sinal de encerramento recebido. Iniciando graceful shutdown...');
+
+  try {
+    // 1. Encerra conexão do cliente Discord
+    if (client.isReady()) {
+      logger.info('Desconectando cliente Discord Gateway...');
+      client.destroy();
+    }
+
+    // 2. Fecha com segurança o banco de dados SQLite (WAL flush)
+    logger.info('Fechando conexão com banco de dados SQLite...');
+    closeDatabase();
+
+    logger.info('Aplicação encerrada graciosamente com sucesso.');
+    process.exit(0);
+  } catch (err) {
+    logger.error({ err }, 'Erro inesperado durante graceful shutdown.');
+    process.exit(1);
+  }
+}
+
+process.on('SIGINT', () => handleGracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => handleGracefulShutdown('SIGTERM'));
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.fatal({ reason, promise }, 'Unhandled Rejection detectada no processo.');
+});
+
+process.on('uncaughtException', (error) => {
+  logger.fatal({ error }, 'Uncaught Exception crítica. Encerrando processo.');
+  handleGracefulShutdown('uncaughtException');
+});
+
 // Conecta o bot ao Discord
-client.login(process.env.DISCORD_TOKEN);
+client.login(env.DISCORD_TOKEN).catch((err) => {
+  logger.fatal({ err }, 'Falha ao autenticar no Discord. Verifique o DISCORD_TOKEN.');
+  process.exit(1);
+});

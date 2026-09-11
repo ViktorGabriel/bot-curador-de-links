@@ -1,7 +1,9 @@
+import logger from '../utils/logger.js';
+
 export default {
   name: 'clientReady',
   once: true,
   execute(c) {
-    console.log(`Bot online com sucesso como ${c.user.tag}`);
+    logger.info({ botTag: c.user.tag, botId: c.user.id }, 'Bot conectado e pronto no Discord Gateway.');
   },
 };

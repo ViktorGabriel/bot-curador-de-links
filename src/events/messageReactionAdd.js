@@ -1,3 +1,5 @@
+import env from '../config/env.js';
+import logger, { createChildLogger } from '../utils/logger.js';
 import {
   claimMessageForCuration,
   markMessageCompleted,
@@ -5,27 +7,7 @@ import {
 } from '../services/database.js';
 import { extractLinkMetadata } from '../services/metadataScraper.js';
 import { buildCuratedEmbed } from '../utils/embedBuilder.js';
-
-// Expressão regular para capturar URLs HTTP/HTTPS
-const URL_REGEX = /(https?:\/\/[^\s]+)/g;
-
-/**
- * Sanitiza e valida URLs extraídas para permitir estritamente esquemas http: e https:
- * prevenindo injeções de protocolos perigosos como javascript: ou data:
- * @param {string} rawUrl
- * @returns {string|null}
- */
-function sanitizeUrl(rawUrl) {
-  try {
-    const parsed = new URL(rawUrl);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return null;
-    }
-    return parsed.href;
-  } catch {
-    return null;
-  }
-}
+import { extractSafeUrls } from '../utils/urlValidator.js';
 
 export default {
   name: 'messageReactionAdd',
@@ -34,12 +16,12 @@ export default {
     // Ignora reações de bots
     if (user.bot) return;
 
-    // Resolução de partials com log higienizado
+    // Resolução de partials
     if (reaction.partial) {
       try {
         await reaction.fetch();
       } catch (err) {
-        console.error('Erro ao buscar partial da reação:', err.message || 'Erro desconhecido');
+        logger.error({ err: err.message }, 'Falha ao buscar partial da reação do Discord.');
         return;
       }
     }
@@ -50,28 +32,31 @@ export default {
       try {
         await message.fetch();
       } catch (err) {
-        console.error('Erro ao buscar partial da mensagem:', err.message || 'Erro desconhecido');
+        logger.error({ err: err.message }, 'Falha ao buscar partial da mensagem do Discord.');
         return;
       }
     }
 
     // Verifica se o emoji corresponde ao configurado
-    if (reaction.emoji.name !== process.env.TRIGGER_EMOJI) return;
+    if (reaction.emoji.name !== env.TRIGGER_EMOJI) return;
 
-    // Extrai URLs do texto
-    const rawUrls = message.content?.match(URL_REGEX);
-    if (!rawUrls || rawUrls.length === 0) return;
+    // Contexto estruturado para rastreamento
+    const reqLogger = createChildLogger({
+      messageId: message.id,
+      curatorId: user.id,
+      channelId: message.channelId,
+    });
 
-    // Sanitiza e valida as URLs encontradas
-    const foundUrls = rawUrls
-      .map((url) => sanitizeUrl(url))
-      .filter(Boolean);
+    // Extrai URLs do texto validando contra SSRF
+    const safeUrls = await extractSafeUrls(message.content);
+    if (safeUrls.length === 0) {
+      reqLogger.debug('Reação acionada, mas nenhuma URL pública válida foi encontrada no conteúdo.');
+      return;
+    }
 
-    if (foundUrls.length === 0) return;
-
-    const targetChannel = client.channels.cache.get(process.env.TARGET_CHANNEL_ID);
+    const targetChannel = client.channels.cache.get(env.TARGET_CHANNEL_ID);
     if (!targetChannel || !targetChannel.isTextBased()) {
-      console.error('Canal de destino inválido ou não encontrado.');
+      reqLogger.error({ targetChannelId: env.TARGET_CHANNEL_ID }, 'Canal de destino inválido ou inacessível.');
       return;
     }
 
@@ -84,19 +69,21 @@ export default {
     });
 
     if (!claimed) {
-      // Mensagem já está sendo processada ou já foi concluída por outra reação
+      reqLogger.debug('Mensagem já curada ou em processamento por outra execução.');
       return;
     }
 
+    reqLogger.info({ urlCount: safeUrls.length }, 'Iniciando curadoria de links da mensagem...');
+
     try {
       // Extração leve de metadados do primeiro link com timeout de 3 segundos
-      const metadata = await extractLinkMetadata(foundUrls[0]);
+      const metadata = await extractLinkMetadata(safeUrls[0]);
 
       // Constrói o embed através do utilitário desacoplado
       const embed = buildCuratedEmbed({
         message,
         curator: user,
-        urls: foundUrls,
+        urls: safeUrls,
         metadata,
       });
 
@@ -109,10 +96,12 @@ export default {
       // Finaliza a curadoria com transação atômica
       markMessageCompleted({
         messageId: message.id,
-        urls: foundUrls,
+        urls: safeUrls,
       });
+
+      reqLogger.info('Curadoria realizada e publicada no canal de destino com sucesso.');
     } catch (err) {
-      console.error('Falha durante o processamento da curadoria:', err.message || err);
+      reqLogger.error({ err }, 'Falha durante o processamento da curadoria.');
       markMessageFailed(message.id);
     }
   },

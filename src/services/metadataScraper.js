@@ -1,5 +1,6 @@
 import ogs from 'open-graph-scraper';
 import { isSafePublicUrl } from '../utils/urlValidator.js';
+import logger from '../utils/logger.js';
 
 /**
  * Valida se uma string é uma URL HTTP ou HTTPS válida para o Discord.
@@ -38,14 +39,17 @@ export async function extractLinkMetadata(url) {
   // Blindagem anti-SSRF: valida IP e bloqueia requisições internas antes do fetch
   const safetyCheck = await isSafePublicUrl(url);
   if (!safetyCheck.safe) {
-    console.warn(`[Segurança] Scraping abortado contra SSRF para ${sanitizeUrlForLog(url)}: ${safetyCheck.reason}`);
+    logger.warn(
+      { url: sanitizeUrlForLog(url), reason: safetyCheck.reason },
+      'Scraping abortado por política de segurança anti-SSRF.'
+    );
     return null;
   }
 
   try {
     const { result, error } = await ogs({
       url: safetyCheck.url,
-      timeout: 3, // Timeout estrito de 3 segundos conforme diretrizes
+      timeout: 3, // Timeout estrito de 3 segundos
     });
 
     if (error || !result) {
@@ -88,7 +92,10 @@ export async function extractLinkMetadata(url) {
       siteName: result.ogSiteName || null,
     };
   } catch (err) {
-    console.warn(`[Scraper] Falha ao extrair metadados de ${sanitizeUrlForLog(url)}:`, err.message || 'Erro desconhecido');
+    logger.warn(
+      { url: sanitizeUrlForLog(url), err: err.message || err },
+      'Falha ao extrair metadados OpenGraph da URL.'
+    );
     return null;
   }
 }

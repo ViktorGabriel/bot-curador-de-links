@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import logger from '../utils/logger.js';
 
 /**
  * Carrega e registra dinamicamente todos os eventos presentes em src/events.
@@ -9,7 +10,10 @@ import { pathToFileURL } from 'node:url';
  */
 export async function loadEvents(client) {
   const eventsPath = path.resolve('src/events');
-  if (!fs.existsSync(eventsPath)) return;
+  if (!fs.existsSync(eventsPath)) {
+    logger.warn({ eventsPath }, 'Diretório de eventos não encontrado.');
+    return;
+  }
 
   const eventFiles = fs.readdirSync(eventsPath).filter((file) => file.endsWith('.js'));
 
@@ -19,7 +23,7 @@ export async function loadEvents(client) {
     const { default: event } = await import(fileUrl);
 
     if (!event || !event.name || typeof event.execute !== 'function') {
-      console.warn(`[EventHandler] Arquivo ${file} não exporta um evento válido.`);
+      logger.warn({ file }, 'Arquivo não exporta uma estrutura de evento válida.');
       continue;
     }
 
@@ -30,5 +34,5 @@ export async function loadEvents(client) {
     }
   }
 
-  console.log(`[EventHandler] ${eventFiles.length} evento(s) registrado(s) com sucesso.`);
+  logger.info({ count: eventFiles.length }, 'Eventos registrados com sucesso no cliente Discord.');
 }
