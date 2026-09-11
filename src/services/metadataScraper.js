@@ -1,4 +1,5 @@
 import ogs from 'open-graph-scraper';
+import { isSafePublicUrl } from '../utils/urlValidator.js';
 
 /**
  * Valida se uma string é uma URL HTTP ou HTTPS válida para o Discord.
@@ -34,9 +35,16 @@ function sanitizeUrlForLog(rawUrl) {
  * @returns {Promise<{title: string|null, description: string|null, image: string|null, favicon: string|null, siteName: string|null}|null>}
  */
 export async function extractLinkMetadata(url) {
+  // Blindagem anti-SSRF: valida IP e bloqueia requisições internas antes do fetch
+  const safetyCheck = await isSafePublicUrl(url);
+  if (!safetyCheck.safe) {
+    console.warn(`[Segurança] Scraping abortado contra SSRF para ${sanitizeUrlForLog(url)}: ${safetyCheck.reason}`);
+    return null;
+  }
+
   try {
     const { result, error } = await ogs({
-      url,
+      url: safetyCheck.url,
       timeout: 3, // Timeout estrito de 3 segundos conforme diretrizes
     });
 

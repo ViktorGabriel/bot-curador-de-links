@@ -100,8 +100,11 @@ export default {
         metadata,
       });
 
-      // Envia para o canal de destino
-      await targetChannel.send({ embeds: [embed] });
+      // Envia para o canal de destino com proteção explícita contra menções em massa (@everyone / @here)
+      await targetChannel.send({
+        embeds: [embed],
+        allowedMentions: { parse: [] },
+      });
 
       // Finaliza a curadoria com transação atômica
       markMessageCompleted({
