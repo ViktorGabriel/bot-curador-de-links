@@ -1,6 +1,35 @@
-node_modules/
+# Segredos e variáveis de ambiente (OBRIGATÓRIO no topo)
 .env
+.env.local
+.env.*.local
+.env.development
+.env.production
+!.env.example
+
+# Chaves e certificados
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependências
+node_modules/
+
+# Banco de dados local SQLite
 *.sqlite
 *.sqlite-journal
 *.sqlite-wal
 *.sqlite-shm
+
+# Sistema e IDEs
+.DS_Store
+Thumbs.db

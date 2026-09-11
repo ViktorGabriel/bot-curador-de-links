@@ -11,6 +11,23 @@ function isValidHttpUrl(str) {
 }
 
 /**
+ * Sanitiza a URL para remoção de query strings ou tokens sensíveis antes de logar.
+ * @param {string} rawUrl
+ * @returns {string}
+ */
+function sanitizeUrlForLog(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return '[URL não permitida]';
+    }
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return '[URL sanitizada]';
+  }
+}
+
+/**
  * Realiza scraping leve via OpenGraph com timeout de 3 segundos para enriquecer embeds.
  *
  * @param {string} url - URL do link extraído da mensagem
@@ -63,7 +80,7 @@ export async function extractLinkMetadata(url) {
       siteName: result.ogSiteName || null,
     };
   } catch (err) {
-    console.warn(`[Scraper] Timeout ou erro ao extrair metadados de ${url}:`, err.message || err);
+    console.warn(`[Scraper] Falha ao extrair metadados de ${sanitizeUrlForLog(url)}:`, err.message || 'Erro desconhecido');
     return null;
   }
 }
