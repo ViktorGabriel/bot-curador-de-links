@@ -2,10 +2,10 @@ import Database from 'better-sqlite3';
 
 const db = new Database('database.sqlite');
 
-// Habilita modo WAL para melhor performance concorrente
+// Ativa WAL para melhor performance e concorrência
 db.pragma('journal_mode = WAL');
 
-// Criação da tabela conforme diretrizes da skill
+// Inicializa a tabela de persistência conforme especificação
 db.exec(`
   CREATE TABLE IF NOT EXISTS saved_links (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,8 +26,8 @@ const insertSavedLinkStmt = db.prepare(`
 `);
 
 /**
- * Verifica se a mensagem já foi processada e salva no banco de dados.
- * @param {string} messageId 
+ * Consulta se uma mensagem já foi salva previamente no banco de dados.
+ * @param {string} messageId
  * @returns {boolean}
  */
 export function isMessageSaved(messageId) {
@@ -35,13 +35,13 @@ export function isMessageSaved(messageId) {
 }
 
 /**
- * Salva um link curado no banco de dados.
- * @param {Object} params
- * @param {string} params.messageId
- * @param {string} params.url
- * @param {string} params.userId
- * @param {string} params.channelId
- * @param {Date|string} params.createdAt
+ * Persiste um link curado no banco de dados.
+ * @param {Object} data
+ * @param {string} data.messageId
+ * @param {string} data.url
+ * @param {string} data.userId
+ * @param {string} data.channelId
+ * @param {Date|string} data.createdAt
  */
 export function saveLink({ messageId, url, userId, channelId, createdAt }) {
   const dateStr = createdAt instanceof Date ? createdAt.toISOString() : (createdAt || new Date().toISOString());

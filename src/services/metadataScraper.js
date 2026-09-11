@@ -1,17 +1,26 @@
 import ogs from 'open-graph-scraper';
 
 /**
- * Extrai metadados OpenGraph (título, descrição, imagem e favicon) de uma URL.
- * Possui timeout de 3 segundos para evitar que requisições lentas travem o bot.
- * 
- * @param {string} url 
+ * Valida se uma string é uma URL HTTP ou HTTPS válida para o Discord.
+ * @param {string|null|undefined} str
+ * @returns {boolean}
+ */
+function isValidHttpUrl(str) {
+  if (!str || typeof str !== 'string') return false;
+  return str.startsWith('http://') || str.startsWith('https://');
+}
+
+/**
+ * Realiza scraping leve via OpenGraph com timeout de 3 segundos para enriquecer embeds.
+ *
+ * @param {string} url - URL do link extraído da mensagem
  * @returns {Promise<{title: string|null, description: string|null, image: string|null, favicon: string|null, siteName: string|null}|null>}
  */
 export async function extractLinkMetadata(url) {
   try {
     const { result, error } = await ogs({
       url,
-      timeout: 3, // 3 segundos de timeout
+      timeout: 3, // Timeout estrito de 3 segundos conforme diretrizes
     });
 
     if (error || !result) {
@@ -27,7 +36,7 @@ export async function extractLinkMetadata(url) {
       imageUrl = result.ogImage.url;
     }
 
-    // Normaliza URL relativa de imagem se necessário
+    // Valida e resolve URLs relativas de imagem
     if (imageUrl && !imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
       try {
         imageUrl = new URL(imageUrl, url).href;
@@ -36,6 +45,7 @@ export async function extractLinkMetadata(url) {
       }
     }
 
+    // Valida e resolve favicons relativos
     let favicon = result.favicon || null;
     if (favicon && !favicon.startsWith('http://') && !favicon.startsWith('https://')) {
       try {
@@ -48,12 +58,12 @@ export async function extractLinkMetadata(url) {
     return {
       title: result.ogTitle || null,
       description: result.ogDescription || null,
-      image: imageUrl,
-      favicon: favicon,
+      image: isValidHttpUrl(imageUrl) ? imageUrl : null,
+      favicon: isValidHttpUrl(favicon) ? favicon : null,
       siteName: result.ogSiteName || null,
     };
   } catch (err) {
-    console.warn(`[OpenGraph] Não foi possível extrair metadados para ${url}:`, err.message || err);
+    console.warn(`[Scraper] Timeout ou erro ao extrair metadados de ${url}:`, err.message || err);
     return null;
   }
 }

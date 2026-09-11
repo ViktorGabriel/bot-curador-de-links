@@ -1,0 +1,2 @@
+// Pasta reservada para comandos do bot (Slash commands / prefixo)
+export default {};
