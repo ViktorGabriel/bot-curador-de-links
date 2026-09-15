@@ -18,15 +18,22 @@ function isValidHttpUrl(str) {
  * @param {import('discord.js').User} params.curator - Usuário que reagiu
  * @param {string[]} params.urls - URLs encontradas
  * @param {Object|null} params.metadata - Metadados extraídos via OpenGraph
+ * @param {Object|null} [params.category] - Configuração da categoria temática
  * @returns {EmbedBuilder}
  */
-export function buildCuratedEmbed({ message, curator, urls, metadata }) {
+export function buildCuratedEmbed({ message, curator, urls, metadata, category = null }) {
   const primaryUrl = urls[0];
+  const color = category?.color || 0x5865F2;
+
+  const authorAvatar = typeof message.author?.displayAvatarURL === 'function'
+    ? message.author.displayAvatarURL()
+    : message.author?.displayAvatarURL;
+
   const embed = new EmbedBuilder()
-    .setColor(0x5865F2)
+    .setColor(color)
     .setAuthor({
-      name: message.author.tag,
-      iconURL: message.author.displayAvatarURL(),
+      name: message.author?.tag || 'Usuário',
+      iconURL: isValidHttpUrl(authorAvatar) ? authorAvatar : undefined,
     });
 
   // Título com link para o artigo principal
@@ -41,7 +48,11 @@ export function buildCuratedEmbed({ message, curator, urls, metadata }) {
     description += `> ${metadata.description.slice(0, 300)}\n\n`;
   }
 
-  description += `📌 **Link salvo:**\n${urls.join('\n')}\n\n` +
+  const categoryHeader = category && category.key !== 'general'
+    ? `${category.emoji} **Link salvo [${category.label}]:**`
+    : '📌 **Link salvo:**';
+
+  description += `${categoryHeader}\n${urls.join('\n')}\n\n` +
     `**Contexto original:**\n${message.content.slice(0, 300)}${message.content.length > 300 ? '...' : ''}\n\n` +
     `[Ir para a mensagem original](${message.url})`;
 
@@ -54,10 +65,14 @@ export function buildCuratedEmbed({ message, curator, urls, metadata }) {
     embed.setThumbnail(metadata.favicon);
   }
 
-  // Rodapé com nome do portal e créditos ao curador
-  const footerText = metadata?.siteName
+  // Rodapé com nome do portal, categoria e créditos ao curador
+  let footerText = metadata?.siteName
     ? `${metadata.siteName} • Curado por @${curator.tag}`
     : `Curado por @${curator.tag}`;
+
+  if (category && category.key !== 'general') {
+    footerText += ` • ${category.label}`;
+  }
 
   embed.setFooter({
     text: footerText,

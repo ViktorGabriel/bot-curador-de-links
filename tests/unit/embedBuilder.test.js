@@ -81,4 +81,27 @@ describe('Embed Builder Unit Tests', () => {
     expect(json.description).toContain('https://example.com/artigo-arquitetura');
     expect(json.footer.text).toBe('Curado por @CuratorUser#9999');
   });
+
+  it('deve aplicar cores e badges de categorias temáticas', () => {
+    const mockCategory = {
+      key: 'dev',
+      label: 'Dev & Código',
+      emoji: '💻',
+      color: 0x2ecc71,
+    };
+
+    const embed = buildCuratedEmbed({
+      message: mockMessage,
+      curator: mockCurator,
+      urls: mockUrls,
+      metadata: { title: 'Dicas de Node.js' },
+      category: mockCategory,
+    });
+
+    const json = embed.toJSON();
+    expect(json.color).toBe(0x2ecc71);
+    expect(json.description).toContain('💻 **Link salvo [Dev & Código]:**');
+    expect(json.footer.text).toContain('Dev & Código');
+  });
 });
+

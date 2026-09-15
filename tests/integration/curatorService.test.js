@@ -162,4 +162,71 @@ describe('CuratorService Integration Tests', () => {
     const curatedMsg = db.prepare('SELECT status FROM curated_messages WHERE message_id = ?').get('message-failure');
     expect(curatedMsg.status).toBe('FAILED');
   });
+
+  it('deve rejeitar curadoria se todas as URLs já existirem no banco (Deduplicação)', async () => {
+    const mockSend = vi.fn().mockResolvedValue({});
+    const targetChannel = { id: 'channel-dedup', send: mockSend };
+    const mockMessage = {
+      id: 'msg-dedup-test',
+      content: 'Veja https://react.dev novamente',
+      channelId: 'channel-1',
+      createdAt: new Date(),
+    };
+
+    const service = new CuratorService({
+      findExistingUrls: vi.fn().mockReturnValue([{ url: 'https://react.dev' }]),
+      extractSafeUrls: vi.fn().mockResolvedValue(['https://react.dev']),
+    });
+
+    const result = await service.curateMessage({
+      message: mockMessage,
+      curator: { id: 'curator-x', tag: 'CuratorX' },
+      targetChannel,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.status).toBe('URLS_ALREADY_CURATED');
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it('deve criar thread de discussão automática quando ativado', async () => {
+    const mockStartThread = vi.fn().mockResolvedValue({});
+    const mockSend = vi.fn().mockResolvedValue({
+      id: 'sent-msg-id',
+      startThread: mockStartThread,
+    });
+
+    const targetChannel = { id: 'channel-thread', send: mockSend };
+    const mockMessage = {
+      id: 'msg-thread-test',
+      content: 'Artigo novo: https://github.com/nodejs/node',
+      channelId: 'channel-1',
+      createdAt: new Date(),
+      author: { tag: 'Author#0001', displayAvatarURL: () => 'avatar.png' },
+    };
+
+    const service = new CuratorService({
+      claimMessage: claimMessageForCuration,
+      markCompleted: markMessageCompleted,
+      markFailed: markMessageFailed,
+      extractSafeUrls: vi.fn().mockResolvedValue(['https://github.com/nodejs/node']),
+      extractMetadata: vi.fn().mockResolvedValue({ title: 'Node.js Core Repo' }),
+      autoCreateThreads: true,
+    });
+
+    const result = await service.curateMessage({
+      message: mockMessage,
+      curator: { id: 'curator-thread', tag: 'CuratorThread#0001' },
+      targetChannel,
+      emoji: '💻',
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockStartThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: expect.stringContaining('Node.js Core Repo'),
+      })
+    );
+  });
 });
+

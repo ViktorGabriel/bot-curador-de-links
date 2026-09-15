@@ -12,6 +12,10 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   DATABASE_PATH: z.string().default('database.sqlite'),
+  AUTO_CREATE_THREADS: z
+    .union([z.boolean(), z.enum(['true', 'false', '1', '0'])])
+    .default('true')
+    .transform((val) => val === true || val === 'true' || val === '1'),
 });
 
 /**
