@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import env from './src/config/env.js';
 import logger from './src/utils/logger.js';
 import { loadEvents } from './src/handlers/eventHandler.js';
+import { loadCommands } from './src/handlers/commandHandler.js';
 import { closeDatabase } from './src/services/database.js';
 
 logger.info({ env: env.NODE_ENV }, 'Iniciando bot-curador-de-links...');
@@ -20,7 +21,8 @@ const client = new Client({
   ],
 });
 
-// Carrega e registra dinamicamente todos os eventos
+// Carrega comandos e eventos dinamicamente
+client.commands = await loadCommands();
 await loadEvents(client);
 
 // ==========================================
