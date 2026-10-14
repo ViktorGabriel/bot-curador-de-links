@@ -33,3 +33,12 @@ node_modules/
 # Sistema e IDEs
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/
+
+# AI Agent files and instructions
+.agents/
+.agent/
+.claude/
+CLAUDE.md
+AGENTS.md
